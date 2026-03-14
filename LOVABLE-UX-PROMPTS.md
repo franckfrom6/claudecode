@@ -4,6 +4,43 @@
 
 ---
 
+## URGENT — Fix EnhancedExerciseCard Simple Mode (collapsed state)
+
+**Problème** : En mode Simple, les cards exercices sont cassées sur mobile — noms sur 3 lignes, tags empilés verticalement, boutons qui compressent le contenu.
+
+#### Prompt 0 — Fix Exercise Cards Simple Mode
+
+```
+Redesign the EnhancedExerciseCard component in Simple mode (non-expanded/collapsed state) to be clean and compact on mobile. Currently it looks broken: exercise names wrap on 3 lines, tags (sets, reps, rest) stack vertically under the icon, and action buttons compress the content area.
+
+Here's the new layout for the collapsed card header (Simple mode):
+
+LINE 1: Exercise name on a single line (truncated with ellipsis if too long), with a small completion checkmark or chevron on the far right.
+
+LINE 2: All tags (sets count, reps range, rest time) displayed inline as a single readable string like "4s · 6-8 reps · 2'30 rest" in text-xs text-muted-foreground — NOT as separate badge chips. This is simpler and takes one line instead of wrapping.
+
+LINE 3 (optional): Only show action buttons (swap, skip, coach instructions) when the card is the active exercise. For non-active cards, hide all action buttons to save space.
+
+Remove the dumbbell/timer icon from the collapsed state in Simple mode — it adds visual noise without value. The exercise name is enough.
+
+Keep the card compact: max height of ~56px for inactive cards (name + inline tags only). Active card can be taller with action buttons shown.
+
+The expanded state (when chevron is clicked) remains unchanged — show the set grid, video, timer etc. as before.
+
+Make sure Advanced mode is NOT affected by these changes — it should keep the current badge/tag layout with tempo and RPE badges.
+
+Specific CSS fixes needed:
+- Exercise name: use "text-sm font-semibold truncate" with the parent having "min-w-0 flex-1" so truncation actually works
+- Tags line: replace the flex-wrap badge layout with a simple text span in Simple mode: "{sets}s · {repsMin === repsMax ? repsMin : repsMin+'-'+repsMax} reps · {formattedRest}"
+- Card padding: p-3 is fine but reduce gap between icon area and text from gap-3 to gap-2
+- Action buttons: wrap in {isActive && (...)} for Simple mode so they only show on the current exercise
+- Chevron: always visible, aligned to the right edge
+
+The goal is that on a 375px screen, an athlete should see 5-6 exercise cards without scrolling, each showing the exercise name and key params at a glance. Think of the Hevy app exercise list: clean, scannable, one line per exercise when collapsed.
+```
+
+---
+
 ## Architecture existante
 
 - **Stack** : React + Tailwind + shadcn/ui + Supabase
