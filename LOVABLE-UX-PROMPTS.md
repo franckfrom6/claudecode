@@ -41,6 +41,245 @@ The goal is that on a 375px screen, an athlete should see 5-6 exercise cards wit
 
 ---
 
+## CODE REVIEW #2 — Problèmes critiques (Mars 2026)
+
+### Findings
+
+| # | Sévérité | Problème | Fichiers |
+|---|----------|----------|----------|
+| 1 | CRITIQUE | Bottom nav **pas fixe** — participe au flux flex, peut disparaître au scroll | StudentLayout.tsx:74, CoachLayout.tsx:78, AdminLayout.tsx:120 |
+| 2 | CRITIQUE | **Aucun bottom padding** sur `<main>` — contenu masqué derrière la nav mobile | Les 3 layouts, balise `<main>` |
+| 3 | CRITIQUE | Classe `safe-area-bottom` **n'existe pas** dans Tailwind — iPhone à encoche cassé | Les 3 layouts, bottom nav |
+| 4 | HAUT | Pages Support standalone (`/support`, `/support/help`, `/support/ticket/:id`) — **pas de bottom nav, pas de retour app** | App.tsx routes, SupportPage, KBLayout |
+| 5 | HAUT | Coach bottom nav items `py-1 px-1.5` — zones de tap **~36px** au lieu de 44px | CoachLayout.tsx:82, AdminLayout.tsx:127 |
+| 6 | HAUT | Dropdown "Plus" peu discoverable — items cachés derrière un menu overflow | CoachLayout.tsx:90-105, AdminLayout.tsx:136-151 |
+| 7 | MOYEN | KBArticle sans breadcrumb — l'utilisateur est perdu dans les articles | KBArticle.tsx |
+| 8 | MOYEN | Z-index conflits : OnboardingTooltip z-60 > Dialog z-50, AISidebar z-50 = Dialog z-50 | OnboardingTooltip.tsx:51, AISidebar.tsx:98 |
+| 9 | MOYEN | `vh` au lieu de `dvh` dans modals — contenu inaccessible avec barre d'adresse mobile | SessionBuilderModal.tsx:215, FreeSessionCreator.tsx:167 |
+| 10 | MOYEN | AISidebarToggle `bottom-20` — peut chevaucher la bottom nav sur petits écrans | AISidebarToggle.tsx:20 |
+
+---
+
+### Prompt N1 — Fix Bottom Nav: Truly Fixed + Safe Area (URGENT)
+
+```
+CRITICAL FIX: The mobile bottom navigation bar in all 3 layout files (StudentLayout.tsx, CoachLayout.tsx, AdminLayout.tsx) is NOT truly fixed — it sits inside a flex column and participates in normal document flow. On long pages, content scrolls behind it or the nav can shift.
+
+Fix ALL 3 layouts with this exact approach:
+
+1. Make the bottom nav truly fixed:
+   - Add "fixed bottom-0 left-0 right-0" to the <nav> element on mobile
+   - Add "z-30" to ensure it stays above page content but below modals (z-50)
+   - Add "bg-background/95 backdrop-blur-md" for a polished glass effect when content scrolls underneath
+
+2. Add proper safe-area-inset for notched iPhones:
+   - Remove the non-existent "safe-area-bottom" class
+   - Add inline style: style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+   - OR add this to the global CSS: .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+   - Also add to tailwind.config.ts a custom utility if preferred
+
+3. Add bottom padding to the <main> content area to prevent content from being hidden behind the fixed nav:
+   - Change <main> className to include "pb-20 md:pb-0" (80px on mobile to account for nav height ~64px + breathing room, 0 on desktop since sidebar is used)
+
+4. Fix touch targets on bottom nav items:
+   - StudentLayout: already has min-h-[44px] — GOOD
+   - CoachLayout: change "py-1 px-1.5" to "py-1.5 px-2 min-h-[44px] min-w-[44px] justify-center" on all nav items AND the MoreHorizontal dropdown trigger
+   - AdminLayout: same fix as CoachLayout
+
+5. Add a subtle top border shadow to the fixed nav: "shadow-[0_-1px_3px_rgba(0,0,0,0.1)]" for visual separation
+
+Apply these changes to ALL 3 files: StudentLayout.tsx, CoachLayout.tsx, AdminLayout.tsx. Do NOT change the desktop sidebar behavior — only the mobile bottom nav.
+```
+
+---
+
+### Prompt N2 — Fix Support Pages: Add Navigation Back to App
+
+```
+The Support pages (/support, /support/help, /support/new, /support/ticket/:ticketId, /aide) render OUTSIDE of StudentLayout/CoachLayout. This means they have NO bottom navigation bar and NO way to return to the main app except browser back button.
+
+Fix this by adding a persistent header bar to ALL support-related pages:
+
+1. Create a SupportHeader component that shows:
+   - Left: Back arrow button that navigates to the user's home page (use the auth context to determine role — /student for athletes, /coach for coaches, /admin for admins)
+   - Center: "Support" or "Help Center" title
+   - Right: UserMenu component for profile/logout access
+
+2. Add this SupportHeader to:
+   - SupportPage.tsx (the main /support page)
+   - KBLayout.tsx (the /support/help knowledge base)
+   - TicketForm (the /support/new page)
+   - TicketDetail (the /support/ticket/:ticketId page)
+
+3. On KBLayout specifically, add breadcrumbs inside KBArticle:
+   - Show: "Help Center > [Category Name] > [Article Title]"
+   - "Help Center" links back to /support/help
+   - Category links to the category section in the sidebar
+   - Current article is non-clickable text
+
+4. On TicketDetail, the existing back button navigates to /support — this is correct, keep it.
+
+5. Style the header consistently with the main app headers: "flex items-center justify-between p-3 border-b border-border bg-background sticky top-0 z-30"
+
+This ensures users are NEVER trapped on support pages without a way to navigate back to the main application.
+```
+
+---
+
+### Prompt N3 — Fix Viewport Height & Z-Index Issues
+
+```
+Fix viewport height and z-index stacking issues across the app:
+
+VIEWPORT HEIGHT FIXES:
+1. SessionBuilderModal.tsx: Change h-[92vh] to h-[92dvh] with fallback h-[92vh] (use className="h-[92vh] h-[92dvh]" — browsers that support dvh will use it, others fall back to vh)
+2. FreeSessionCreator.tsx: Change h-[90vh] to h-[90dvh] with same fallback pattern
+3. CoachExercises.tsx: Change max-h-[80vh] to max-h-[80dvh]
+4. AdminKB.tsx: Change max-h-[85vh] to max-h-[85dvh]
+5. AdminSupport.tsx: Change max-h-[80vh] to max-h-[80dvh]
+6. KBLayout.tsx sidebar: Change h-[calc(100vh-3.5rem)] to h-[calc(100dvh-3.5rem)]
+
+This prevents content from being cut off when mobile browsers show/hide the address bar.
+
+Z-INDEX STACKING FIXES:
+1. OnboardingTooltip.tsx: Change z-[60] to z-[45] — tooltips should appear BELOW modals (z-50), not above
+2. AISidebar.tsx backdrop: Change z-50 to z-[55] — AI sidebar should appear ABOVE regular dialogs since it's a persistent panel
+3. AISidebar.tsx content panel: Change z-50 to z-[55] to match backdrop
+4. AISidebarToggle.tsx: Change bottom-20 to bottom-24 (96px) to properly clear the mobile bottom nav which is ~64px + safe area
+
+Establish this z-index scale as a reference:
+- z-10: Sticky headers within page content
+- z-20: Floating action buttons
+- z-30: Fixed bottom nav, fixed headers
+- z-40: Dropdowns, popovers, tooltips
+- z-50: Modal dialogs, sheets, drawers
+- z-55: AI Sidebar (persistent panel)
+- z-100: Toasts/notifications (already correct)
+```
+
+---
+
+### Prompt N4 — Every Page Must Have Back Navigation
+
+```
+Add consistent back navigation to EVERY page in the app so users can ALWAYS navigate backwards without relying on the browser back button.
+
+COACH DETAIL PAGES (already have back buttons — verify and standardize):
+- StudentDetail: Has back button → /coach/students ✓
+- CoachProgramDetail: Has back button → parent student ✓
+- ProgramEditor: Has back button → parent ✓
+- StudentBilan: Has back button (navigate(-1)) ✓
+
+ADD BREADCRUMBS to coach detail pages:
+- StudentDetail: "Students > [Student Name]"
+- CoachProgramDetail: "Students > [Student Name] > [Program Name]"
+- ProgramEditor: "Students > [Student Name] > New Program" or "Edit [Program Name]"
+- StudentBilan: "Students > [Student Name] > Bilan AI"
+
+Create a reusable Breadcrumb component:
+- Props: items: { label: string, to?: string }[]
+- Render: Items separated by ">" chevron icons
+- Last item is current page (no link, bold text)
+- On mobile (< md): Show only back arrow + current page name (collapse intermediate levels)
+- Style: text-sm text-muted-foreground, links are hover:text-foreground
+- Place it at the top of each page, before the main content
+
+STUDENT PAGES (add contextual navigation):
+- StudentNutrition: Has back button → /student ✓
+- LiveSession: Has sticky back/quit button ✓
+- AthleteProgramEditor: Has back button ✓
+
+These are already good, but add the same Breadcrumb component for consistency:
+- LiveSession: "Week > [Session Name]" (back arrow only on mobile)
+- StudentNutrition: "Profile > Nutrition"
+
+LANDING/AUTH PAGES (no changes needed — these are standalone entry points).
+```
+
+---
+
+### Prompt N5 — Optimize Every Clickable Element
+
+```
+Perform a comprehensive pass on EVERY interactive element in the app to ensure optimal click/tap experience:
+
+1. MINIMUM TAP TARGET SIZE — 44x44px on ALL clickable elements:
+   - All icon-only buttons must be min-w-[44px] min-h-[44px] (use padding to expand hit area if visual size should stay small)
+   - All text buttons must have min-h-[44px] with adequate horizontal padding
+   - All nav items must have min-h-[44px]
+   - All dropdown triggers must have min-h-[44px]
+
+2. VISUAL FEEDBACK on every clickable element:
+   - Buttons: Add active:scale-[0.97] transition-transform for press feedback
+   - Cards/list items: Add active:bg-accent/50 for tap feedback
+   - Icon buttons: Add hover:bg-secondary active:bg-secondary/80
+   - Links: Add hover:text-foreground transition-colors
+   - Ensure ALL elements have cursor-pointer when clickable
+
+3. SPACING between adjacent tap targets:
+   - Minimum 8px gap between any two clickable elements
+   - In the bottom nav, ensure items have at least 8px between them
+   - In exercise card action buttons (swap, skip, chevron), add gap-2 minimum
+   - In form rows with multiple buttons, add gap-2 minimum
+
+4. DISABLED STATES — make them visually clear:
+   - All disabled buttons: opacity-50 cursor-not-allowed (not just opacity-40)
+   - All disabled inputs: bg-muted/50 text-muted-foreground cursor-not-allowed
+   - Never allow click events on disabled elements (check all onClick handlers)
+
+5. FOCUS STATES for keyboard/accessibility:
+   - Add focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 to ALL interactive elements
+   - This is critical for accessibility and also helps with tablet users using external keyboards
+
+6. SPECIFIC COMPONENTS to fix:
+   - CircularRestTimer: +/- buttons from 32px to 48px
+   - EnhancedExerciseCard duration steppers: from h-4 (16px) to h-8 (32px) minimum, with 44px tap area via padding
+   - LiveExerciseList drag handles: from w-3.5 (14px) to w-6 (24px) with min-h-[44px] tap area
+   - WeeklyCheckinForm soreness buttons: from 32px to 44px
+   - CoachLayout/AdminLayout "More" dropdown trigger: ensure 44px tap area
+   - UserMenu trigger: ensure 44px tap area
+```
+
+---
+
+### Prompt N6 — Sticky Headers on Every Page
+
+```
+Add persistent sticky headers to all main pages so users always know where they are and can navigate. The header should NEVER scroll away.
+
+LAYOUT-LEVEL CHANGES:
+1. In StudentLayout, CoachLayout, AdminLayout: The mobile header is already in flow but NOT sticky. Make it sticky:
+   - Add "sticky top-0 z-30 bg-background/95 backdrop-blur-md" to the mobile <header> element
+   - This ensures the logo + user menu are always visible
+
+2. On desktop, the sidebar is already fixed — no changes needed.
+
+PAGE-LEVEL STICKY HEADERS:
+For pages that have their own title/action bar, make those sticky too:
+
+3. StudentWeek: The week selector (day tabs) should be sticky below the main header:
+   - Wrap the week navigation in a sticky container: "sticky top-[57px] z-20 bg-background/95 backdrop-blur-md py-2 -mx-4 px-4"
+   - This ensures the day selector is always visible while scrolling through sessions
+
+4. CoachStudents: The search/filter bar should be sticky:
+   - Wrap the search input and filters in: "sticky top-[57px] z-20 bg-background/95 backdrop-blur-md py-2 -mx-4 px-4"
+
+5. CoachExercises: The search bar and category filter should be sticky:
+   - Same sticky pattern as CoachStudents
+
+6. LiveSession: The session header (elapsed time, progress) is already sticky — verify it uses proper z-index (z-20) and backdrop-blur
+
+7. StudentProfile: The tab navigation (info/nutrition/notifications) should be sticky:
+   - Wrap tabs in: "sticky top-[57px] z-20 bg-background py-2"
+
+IMPORTANT: All sticky elements should use backdrop-blur-md and bg-background/95 for a polished glass effect. The stacking should be:
+- z-30: Main layout header + bottom nav (fixed)
+- z-20: Page-level sticky headers (sticky)
+- z-10: In-page sticky elements (if any)
+```
+
+---
+
 ## Architecture existante
 
 - **Stack** : React + Tailwind + shadcn/ui + Supabase
@@ -214,7 +453,10 @@ Create a unified design system with consistent spacing, typography, and componen
 
 | Phase | Prompts | Impact |
 |-------|---------|--------|
-| **Phase 1** | #1, #2, #3 | Mobile utilisable |
+| **Phase 0 — URGENT** | #0, #N1, #N3 | Fix cards Simple mode + bottom nav fixe + viewport/z-index |
+| **Phase 0b — NAV** | #N2, #N4, #N6 | Support pages navigation + breadcrumbs + sticky headers |
+| **Phase 0c — CLICK** | #N5, #3 | Touch targets 44px + espacement + feedback visuel |
+| **Phase 1** | #1, #2 | Navigation mobile modernisée + responsive 375px |
 | **Phase 2** | #4, #5, #7b | Expérience athlète premium + mode toggle |
 | **Phase 3** | #6, #7, #8 | Expérience coach + formulaires + animations |
 | **Phase 4** | #10, #9 | Acquisition (landing + onboarding) |
